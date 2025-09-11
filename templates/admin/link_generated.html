@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h2>Ссылка успешно создана!</h2>
+    
+    <div class="alert alert-success">
+        <h4>Для специалиста: {{ specialist.name }}</h4>
+        <p><strong>Ссылка:</strong> <a href="{{ link }}" target="_blank">{{ link }}</a></p>
+        <p><strong>Действует до:</strong> {{ expires_at.strftime('%d.%m.%Y %H:%M') }}</p>
+    </div>
+    
+    <a href="{{ url_for('generate_link') }}" class="btn btn-primary">Создать еще одну</a>
+    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">В админку</a>
+</div>
+{% endblock %}

@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h2>Генерация ссылки для оценки</h2>
+    
+    <form method="POST">
+        <div class="mb-3">
+            <label for="specialist_id" class="form-label">Специалист:</label>
+            <select class="form-select" id="specialist_id" name="specialist_id" required>
+                <option value="">Выберите специалиста</option>
+                {% for specialist in specialists %}
+                <option value="{{ specialist.id }}">{{ specialist.name }} - {{ specialist.position }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div class="mb-3">
+            <label for="days_valid" class="form-label">Срок действия (дней):</label>
+            <input type="number" class="form-control" id="days_valid" name="days_valid" value="7" min="1" max="30">
+        </div>
+        
+        <button type="submit" class="btn btn-primary">Сгенерировать ссылку</button>
+    </form>
+</div>
+{% endblock %}
