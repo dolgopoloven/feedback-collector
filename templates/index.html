@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6 text-center">
+        <h1>Оцените наше обслуживание</h1>
+        <p class="lead">Насколько вы довольны вашим визитом?</p>
+
+        <form action="{{ url_for('submit_score') }}" method="POST">
+            <div class="mb-3">
+                <label for="score" class="form-label">Выберите оценку от 1 до 10:</label>
+                <input type="range" class="form-range" min="1" max="10" step="1" id="score" name="score"
+                       oninput="this.nextElementSibling.value = this.value + ' (9-10 - отлично)'">
+                <output>5 (9-10 - отлично)</output>
+            </div>
+            <button type="submit" class="btn btn-primary btn-lg">Отправить оценку</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

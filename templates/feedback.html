@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6 text-center">
+        <h1>Спасибо за вашу оценку: {{ score }}</h1>
+        <p class="lead">Пожалуйста, подскажите, что нам стоит улучшить?</p>
+
+        <form action="{{ url_for('submit_feedback') }}" method="POST">
+            <!-- Скрытое поле, чтобы передать ID оценки для обновления -->
+            <input type="hidden" name="assessment_id" value="{{ assessment.id }}">
+
+            <div class="mb-3">
+                <label for="comment" class="form-label">Ваш комментарий к оценке {{ assessment.score }}:</label>
+                <textarea class="form-control" id="comment" name="comment" rows="3" placeholder="Что произошло?..." required></textarea>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-lg">Отправить отзыв</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
