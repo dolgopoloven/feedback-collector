@@ -1,2 +1,7 @@
-Flask
-Flask-SQLAlchemy
+Flask==2.3.3
+Flask-SQLAlchemy==3.0.5
+Flask-Migrate==4.0.5
+Werkzeug==2.3.7
+Jinja2==3.1.2
+SQLAlchemy==2.0.23
+python-dotenv==1.0.0
