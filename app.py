@@ -1,7 +1,10 @@
 from flask_sqlalchemy import SQLAlchemy
 from flask import Flask, render_template, request, redirect, url_for, session
 from functools import wraps
-from datetime import datetime
+from datetime import datetime, timedelta  # Объединенные импорты
+import secrets
+import string
+from flask_migrate import Migrate
 
 # Создаем экземпляр приложения Flask
 app = Flask(__name__)
@@ -13,89 +16,112 @@ app.config['ADMIN_CREDENTIALS'] = {
 }
 
 # Конфигурация Базы Данных
-# SQLite будет использовать файл 'database.db' в нашей папке проекта
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False  # Отключаем ненужные уведомления
-app.config['SECRET_KEY'] = 'ваш-очень-секретный-ключ-тут'  # ← ОБЯЗАТЕЛЬНО ДОБАВЬТЕ
-
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SECRET_KEY'] = 'Z0502Zz!'
 
 # Создаем экземпляр SQLAlchemy и связываем его с нашим приложением
 db = SQLAlchemy(app)
+migrate = Migrate(app, db)  # Миграции инициализируются здесь
 
-# Определяем Модель (таблицу) для хранения оценок
+# Модель для специалистов
+class Specialist(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    position = db.Column(db.String(100))
+    is_active = db.Column(db.Boolean, default=True)
+    
+    def __repr__(self):
+        return f'<Specialist {self.id} - {self.name}>'
+
+# Модель для одноразовых ссылок
+class AssessmentLink(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    token = db.Column(db.String(50), unique=True, nullable=False)
+    specialist_id = db.Column(db.Integer, db.ForeignKey('specialist.id'), nullable=False)
+    specialist = db.relationship('Specialist', backref=db.backref('links', lazy=True))
+    is_used = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    expires_at = db.Column(db.DateTime)
+    
+    def __repr__(self):
+        return f'<AssessmentLink {self.token} - Used: {self.is_used}>'
+
+# Модель для оценок
 class Assessment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    score = db.Column(db.Integer, nullable=False)  # Столбец для оценки (не может быть пустым)
-    comment = db.Column(db.Text)                   # Столбец для комментария (может быть пустым)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow) # Дата создания, проставляется автоматически
+    score = db.Column(db.Integer, nullable=False)
+    comment = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    link_id = db.Column(db.Integer, db.ForeignKey('assessment_link.id'))
+    assessment_link = db.relationship('AssessmentLink', backref=db.backref('assessment', uselist=False))
 
-    # Метод для красивого отображения объекта (для админки и отладки)
-    def __repr__(self):
-        return f'<Assessment {self.id} - Score: {self.score}>'
+def generate_token(length=20):
+    """Генерирует случайный токен для ссылки"""
+    alphabet = string.ascii_letters + string.digits
+    return ''.join(secrets.choice(alphabet) for _ in range(length))
 
-# Создаем таблицы в БД (выполняется один раз при первом запуске)
-# Важно: Этот код должен быть выполнен ДО того, как начнут обрабатываться запросы.
+# Создаем таблицы в БД
 with app.app_context():
     db.create_all()
 
-# Базовый маршрут - Главная страница с формой оценки
+# Маршруты
 @app.route('/')
 def index():
-    # Просто отображаем HTML-шаблон с формой
-    return render_template('index.html')
+    return render_template('welcome.html')
 
-# Маршрут для обработки данных из формы
-@app.route('/submit', methods=['POST'])
-def submit_score():
-    # Получаем оценку из формы и преобразуем в число
+@app.route('/assessment/<token>')
+def assessment(token):
+    assessment_link = AssessmentLink.query.filter_by(token=token).first_or_404()
+    
+    if assessment_link.is_used:
+        return render_template('link_used.html'), 410
+    
+    if assessment_link.expires_at and assessment_link.expires_at < datetime.utcnow():
+        return render_template('link_expired.html'), 410
+    
+    return render_template('index.html', 
+                         specialist=assessment_link.specialist,
+                         token=token)
+
+@app.route('/submit/<token>', methods=['POST'])
+def submit_score(token):
+    assessment_link = AssessmentLink.query.filter_by(token=token, is_used=False).first_or_404()
     score = int(request.form['score'])
     
-    # СОХРАНЯЕМ ЛЮБУЮ ОЦЕНКУ В БАЗУ ДАННЫХ СРАЗУ ЖЕ
-    # Для оценок 9-10 комментария пока нет, он будет NULL
     new_assessment = Assessment(score=score)
     db.session.add(new_assessment)
+    
+    assessment_link.is_used = True
+    assessment_link.assessment = new_assessment
+    new_assessment.assessment_link = assessment_link
+    
     db.session.commit()
 
-    # Проверяем оценку и решаем, что делать дальше
     if score >= 9:
-        # Если оценка высокая, перенаправляем на страницу благодарности
         return redirect(url_for('thanks'))
     else:
-        # Если оценка низкая, перенаправляем на страницу с формой обратной связи
-        # Мы передаем ID сохраненной оценки, чтобы потом обновить ее комментарием
         return redirect(url_for('feedback', assessment_id=new_assessment.id))
 
-# Маршрут для страницы сбора обратной связи (для низких оценок)
 @app.route('/feedback')
 def feedback():
-    # Получаем ID оценки из параметра запроса (например, /feedback?assessment_id=1)
     assessment_id = request.args.get('assessment_id', type=int)
-    # Находим эту оценку в базе
     assessment = Assessment.query.get_or_404(assessment_id)
-    # Отображаем шаблон, передаем в него оценку
     return render_template('feedback.html', assessment=assessment)
 
-# Маршрут для обработки самой обратной связи (комментария)
 @app.route('/submit_feedback', methods=['POST'])
 def submit_feedback():
-    # Получаем данные из формы
     assessment_id = int(request.form['assessment_id'])
     comment = request.form['comment']
-
-    # НАХОДИМ существующую запись в БД и ОБНОВЛЯЕМ ее
     assessment = Assessment.query.get_or_404(assessment_id)
     assessment.comment = comment
     db.session.commit()
-
     return render_template('feedback_thanks.html')
 
-# Маршрут для страницы благодарности и кнопок отзывов (для высоких оценок)
 @app.route('/thanks')
 def thanks():
-    # Просто отображаем шаблон с кнопками
     return render_template('thanks.html')
 
-# Страница входа для админа
 @app.route('/admin/login', methods=['GET', 'POST'])
 def admin_login():
     if request.method == 'POST':
@@ -103,21 +129,17 @@ def admin_login():
         password = request.form.get('password')
         if (login == app.config['ADMIN_CREDENTIALS']['login'] and 
             password == app.config['ADMIN_CREDENTIALS']['password']):
-            # Если credentials верные, сохраняем в сессии
             session['admin_logged_in'] = True
             return redirect(url_for('admin_dashboard'))
         else:
             return render_template('admin/login.html', error='Неверные логин или пароль')
-    
     return render_template('admin/login.html')
 
-# Выход из админки
 @app.route('/admin/logout')
 def admin_logout():
     session.pop('admin_logged_in', None)
     return redirect(url_for('index'))
 
-# Декоратор для проверки авторизации админа
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -126,46 +148,35 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-# Обновите маршрут админки, добавив декоратор защиты
 @app.route('/admin')
 @admin_required
 def admin_dashboard():
-    # Получаем параметры фильтрации из URL (если они есть)
     score_filter = request.args.get('score', type=int)
     date_from_str = request.args.get('date_from')
     date_to_str = request.args.get('date_to')
     
-    # Начинаем с базового запроса "дай все оценки"
     query = Assessment.query
     
-    # Применяем фильтр по оценке, если он задан
     if score_filter:
         query = query.filter(Assessment.score == score_filter)
     
-    # Применяем фильтр по дате "ОТ", если он задан
     if date_from_str:
         try:
             date_from = datetime.strptime(date_from_str, '%Y-%m-%d')
             query = query.filter(Assessment.created_at >= date_from)
         except ValueError:
-            # Если дата неверного формата, просто игнорируем этот фильтр
             pass
     
-    # Применяем фильтр по дате "ДО", если он задан
     if date_to_str:
         try:
             date_to = datetime.strptime(date_to_str, '%Y-%m-%d')
-            # Добавляем 1 день, чтобы включить весь указанный день
             date_to = date_to.replace(hour=23, minute=59, second=59)
             query = query.filter(Assessment.created_at <= date_to)
         except ValueError:
-            # Если дата неверного формата, просто игнорируем этот фильтр
             pass
     
-    # Выполняем запрос и сортируем по дате (сначала новые)
     assessments = query.order_by(Assessment.created_at.desc()).all()
     
-    # Передаем все оценки и текущие значения фильтров в шаблон
     return render_template(
         'admin/dashboard.html', 
         assessments=assessments,
@@ -174,6 +185,78 @@ def admin_dashboard():
         current_date_to=date_to_str
     )
 
-# Запуск приложения
+@app.route('/admin/generate-link', methods=['GET', 'POST'])
+@admin_required
+def generate_link():
+    specialists = Specialist.query.filter_by(is_active=True).all()
+    
+    if request.method == 'POST':
+        specialist_id = request.form.get('specialist_id')
+        days_valid = int(request.form.get('days_valid', 7))
+        
+        specialist = Specialist.query.get_or_404(specialist_id)
+        token = generate_token()
+        expires_at = datetime.utcnow() + timedelta(days=days_valid)
+        
+        new_link = AssessmentLink(
+            token=token,
+            specialist_id=specialist.id,
+            expires_at=expires_at
+        )
+        
+        db.session.add(new_link)
+        db.session.commit()
+        
+        full_url = f"{request.url_root}assessment/{token}"
+        
+        return render_template('admin/link_generated.html', 
+                             link=full_url, 
+                             specialist=specialist,
+                             expires_at=expires_at)
+    
+    return render_template('admin/generate_link.html', specialists=specialists)
+
+@app.route('/db')
+@admin_required  # ← РАСКОММЕНТИРОВАТЬ!
+def view_database():
+    specialists = Specialist.query.all()
+    assessment_links = AssessmentLink.query.all()
+    assessments = Assessment.query.all()
+    
+    return render_template('admin/db_view.html',
+                         specialists=specialists,
+                         assessment_links=assessment_links,
+                         assessments=assessments)
+
+# Управление специалистами
+@app.route('/admin/specialists')
+@admin_required
+def manage_specialists():
+    specialists = Specialist.query.all()
+    return render_template('admin/specialists.html', specialists=specialists)
+
+@app.route('/admin/specialists/add', methods=['GET', 'POST'])
+@admin_required
+def add_specialist():
+    if request.method == 'POST':
+        name = request.form.get('name')
+        position = request.form.get('position')
+        
+        if name:
+            new_specialist = Specialist(name=name, position=position)
+            db.session.add(new_specialist)
+            db.session.commit()
+            return redirect(url_for('manage_specialists'))
+    
+    return render_template('admin/add_specialist.html')
+
+@app.route('/admin/specialists/<int:id>/toggle')
+@admin_required
+def toggle_specialist(id):
+    specialist = Specialist.query.get_or_404(id)
+    specialist.is_active = not specialist.is_active
+    db.session.commit()
+    return redirect(url_for('manage_specialists'))
+
 if __name__ == '__main__':
     app.run(debug=True)

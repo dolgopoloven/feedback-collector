@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h2>Просмотр базы данных</h2>
+    
+    <div class="mb-4">
+        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">← Назад в админку</a>
+    </div>
+
+    <!-- Таблица специалистов -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5>Специалисты ({{ specialists|length }})</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-sm table-striped">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Имя</th>
+                            <th>Должность</th>
+                            <th>Активен</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for spec in specialists %}
+                        <tr>
+                            <td>{{ spec.id }}</td>
+                            <td>{{ spec.name }}</td>
+                            <td>{{ spec.position }}</td>
+                            <td>{{ 'Да' if spec.is_active else 'Нет' }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="4" class="text-center">Нет данных</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Таблица ссылок -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5>Ссылки для оценки ({{ assessment_links|length }})</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-sm table-striped">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Токен</th>
+                            <th>Специалист</th>
+                            <th>Использована</th>
+                            <th>Создана</th>
+                            <th>Истекает</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for link in assessment_links %}
+                        <tr>
+                            <td>{{ link.id }}</td>
+                            <td><code>{{ link.token[:10] }}...</code></td>
+                            <td>{{ link.specialist.name if link.specialist else 'N/A' }}</td>
+                            <td>
+                                <span class="badge {% if link.is_used %}bg-danger{% else %}bg-success{% endif %}">
+                                    {{ 'Да' if link.is_used else 'Нет' }}
+                                </span>
+                            </td>
+                            <td>{{ link.created_at.strftime('%d.%m.%Y') if link.created_at else 'N/A' }}</td>
+                            <td>{{ link.expires_at.strftime('%d.%m.%Y') if link.expires_at else 'Бессрочно' }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center">Нет данных</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Таблица оценок -->
+    <div class="card">
+        <div class="card-header">
+            <h5>Оценки ({{ assessments|length }})</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-sm table-striped">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Оценка</th>
+                            <th>Комментарий</th>
+                            <th>Дата</th>
+                            <th>Ссылка</th>
+                            <th>Специалист</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for assessment in assessments %}
+                        <tr>
+                            <td>{{ assessment.id }}</td>
+                            <td>
+                                <span class="badge {% if assessment.score >= 9 %}bg-success{% elif assessment.score >= 6 %}bg-warning{% else %}bg-danger{% endif %}">
+                                    {{ assessment.score }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if assessment.comment %}
+                                    {{ assessment.comment[:50] }}{% if assessment.comment|length > 50 %}...{% endif %}
+                                {% else %}
+                                    <span class="text-muted">нет</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ assessment.created_at.strftime('%d.%m.%Y %H:%M') if assessment.created_at else 'N/A' }}</td>
+                            <td>
+                                {% if assessment.assessment_link %}
+                                    <code>{{ assessment.assessment_link.token[:8] }}...</code>
+                                {% else %}
+                                    <span class="text-muted">N/A</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if assessment.assessment_link and assessment.assessment_link.specialist %}
+                                    {{ assessment.assessment_link.specialist.name }}
+                                {% else %}
+                                    <span class="text-muted">N/A</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center">Нет данных</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6 text-center">
+        <h1>Система оценки специалистов</h1>
+        <p class="lead">Для оценки перейдите по уникальной ссылке, предоставленной вам администратором.</p>
+        <div class="mt-4">
+            <a href="{{ url_for('admin_login') }}" class="btn btn-primary me-2">Вход для администратора</a>
+            <a href="/admin/generate-link" class="btn btn-outline-secondary">Генерация ссылок</a>
+        </div>
+    </div>
+</div>
+{% endblock %}
