@@ -1,30 +1,29 @@
-from flask_sqlalchemy import SQLAlchemy
-from flask import Flask, render_template, request, redirect, url_for, session
-from functools import wraps
-from datetime import datetime, timedelta  # Объединенные импорты
 import secrets
 import string
+from datetime import datetime, timedelta
+from functools import wraps
+
+from flask import Flask, render_template, request, redirect, url_for, session
+from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 
 # Создаем экземпляр приложения Flask
 app = Flask(__name__)
 
-# Простейшая аутентификация для админки
+# Конфигурация
 app.config['ADMIN_CREDENTIALS'] = {
     'login': 'admin',
-    'password': 'secret'  # Смените на свой пароль!
+    'password': 'secret'
 }
-
-# Конфигурация Базы Данных
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = 'Z0502Zz!'
 
-# Создаем экземпляр SQLAlchemy и связываем его с нашим приложением
+# Инициализируем расширения
 db = SQLAlchemy(app)
-migrate = Migrate(app, db)  # Миграции инициализируются здесь
+migrate = Migrate(app, db)
 
-# Модель для специалистов
+# Модели
 class Specialist(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
@@ -34,7 +33,6 @@ class Specialist(db.Model):
     def __repr__(self):
         return f'<Specialist {self.id} - {self.name}>'
 
-# Модель для одноразовых ссылок
 class AssessmentLink(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     token = db.Column(db.String(50), unique=True, nullable=False)
@@ -47,7 +45,6 @@ class AssessmentLink(db.Model):
     def __repr__(self):
         return f'<AssessmentLink {self.token} - Used: {self.is_used}>'
 
-# Модель для оценок
 class Assessment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     score = db.Column(db.Integer, nullable=False)
@@ -55,15 +52,44 @@ class Assessment(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     link_id = db.Column(db.Integer, db.ForeignKey('assessment_link.id'))
     assessment_link = db.relationship('AssessmentLink', backref=db.backref('assessment', uselist=False))
+    
+    def get_specialist(self):
+        if self.assessment_link and self.assessment_link.specialist:
+            return self.assessment_link.specialist
+        return None
 
+# Вспомогательные функции
 def generate_token(length=20):
-    """Генерирует случайный токен для ссылки"""
     alphabet = string.ascii_letters + string.digits
     return ''.join(secrets.choice(alphabet) for _ in range(length))
 
-# Создаем таблицы в БД
-with app.app_context():
-    db.create_all()
+def init_database():
+    with app.app_context():
+        db.create_all()
+        
+        if not Specialist.query.first():
+            test_specialists = [
+                Specialist(name='Иванов Иван', position='Старший менеджер'),
+                Specialist(name='Петрова Анна', position='Консультант'),
+                Specialist(name='Сидоров Алексей', position='Специалист по качеству')
+            ]
+            
+            for specialist in test_specialists:
+                db.session.add(specialist)
+            db.session.commit()
+            print('Тестовые специалисты добавлены')
+
+# Инициализируем базу данных
+init_database()
+
+# Декораторы
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('admin_logged_in'):
+            return redirect(url_for('admin_login'))
+        return f(*args, **kwargs)
+    return decorated_function
 
 # Маршруты
 @app.route('/')
@@ -140,18 +166,11 @@ def admin_logout():
     session.pop('admin_logged_in', None)
     return redirect(url_for('index'))
 
-def admin_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if not session.get('admin_logged_in'):
-            return redirect(url_for('admin_login'))
-        return f(*args, **kwargs)
-    return decorated_function
-
 @app.route('/admin')
 @admin_required
 def admin_dashboard():
     score_filter = request.args.get('score', type=int)
+    specialist_filter = request.args.get('specialist', type=int)
     date_from_str = request.args.get('date_from')
     date_to_str = request.args.get('date_to')
     
@@ -159,6 +178,9 @@ def admin_dashboard():
     
     if score_filter:
         query = query.filter(Assessment.score == score_filter)
+    
+    if specialist_filter:
+        query = query.join(AssessmentLink).filter(AssessmentLink.specialist_id == specialist_filter)
     
     if date_from_str:
         try:
@@ -176,11 +198,33 @@ def admin_dashboard():
             pass
     
     assessments = query.order_by(Assessment.created_at.desc()).all()
+    specialists = Specialist.query.filter_by(is_active=True).order_by(Specialist.name).all()
+    
+    total_assessments = len(assessments)
+    average_score = round(sum(a.score for a in assessments) / total_assessments, 2) if total_assessments > 0 else 0
+    
+    specialist_stats = {}
+    if specialist_filter:
+        specialist = Specialist.query.get(specialist_filter)
+        if specialist:
+            specialist_scores = [a.score for a in assessments]
+            specialist_stats = {
+                'name': specialist.name,
+                'total': len(specialist_scores),
+                'average': round(sum(specialist_scores) / len(specialist_scores), 2) if specialist_scores else 0,
+                'min': min(specialist_scores) if specialist_scores else 0,
+                'max': max(specialist_scores) if specialist_scores else 0
+            }
     
     return render_template(
         'admin/dashboard.html', 
         assessments=assessments,
+        specialists=specialists,
+        total_assessments=total_assessments,
+        average_score=average_score,
+        specialist_stats=specialist_stats,
         current_score_filter=score_filter,
+        current_specialist_filter=specialist_filter,
         current_date_from=date_from_str,
         current_date_to=date_to_str
     )
@@ -216,19 +260,6 @@ def generate_link():
     
     return render_template('admin/generate_link.html', specialists=specialists)
 
-@app.route('/db')
-@admin_required  # ← РАСКОММЕНТИРОВАТЬ!
-def view_database():
-    specialists = Specialist.query.all()
-    assessment_links = AssessmentLink.query.all()
-    assessments = Assessment.query.all()
-    
-    return render_template('admin/db_view.html',
-                         specialists=specialists,
-                         assessment_links=assessment_links,
-                         assessments=assessments)
-
-# Управление специалистами
 @app.route('/admin/specialists')
 @admin_required
 def manage_specialists():
@@ -257,6 +288,18 @@ def toggle_specialist(id):
     specialist.is_active = not specialist.is_active
     db.session.commit()
     return redirect(url_for('manage_specialists'))
+
+@app.route('/db')
+@admin_required
+def view_database():
+    specialists = Specialist.query.all()
+    assessment_links = AssessmentLink.query.all()
+    assessments = Assessment.query.all()
+    
+    return render_template('admin/db_view.html',
+                         specialists=specialists,
+                         assessment_links=assessment_links,
+                         assessments=assessments)
 
 if __name__ == '__main__':
     app.run(debug=True)
