@@ -84,9 +84,13 @@ def init_database():
         
         if not Specialist.query.first():
             test_specialists = [
-                Specialist(name='Иванов Иван', position='Старший менеджер'),
-                Specialist(name='Петрова Анна', position='Консультант'),
-                Specialist(name='Сидоров Алексей', position='Специалист по качеству')
+                Specialist(name='Кусков Александр', position='Рефракционный хирург'),
+                Specialist(name='Нохрина Ксения', position='Рефракционный хирург'),
+                Specialist(name='Смирнова Валерия', position='Офтальмолог'),
+                Specialist(name='Буторина Наталья', position='Офтальмолог'),
+                Specialist(name='Арапов Артур', position='Ретинолог'),
+                Specialist(name='Квиникадзе Мариам', position='Офтальмолог'),                
+                Specialist(name='Григорьев Игорь', position='Катарактальный хирург')
             ]
             
             for specialist in test_specialists:
@@ -278,67 +282,6 @@ def admin_dashboard():
         current_date_to=date_to_str
     )
 
-""" def admin_dashboard():
-    score_filter = request.args.get('score', type=int)
-    specialist_filter = request.args.get('specialist', type=int)
-    date_from_str = request.args.get('date_from')
-    date_to_str = request.args.get('date_to')
-    
-    query = Assessment.query
-    
-    if score_filter:
-        query = query.filter(Assessment.score == score_filter)
-    
-    if specialist_filter:
-        query = query.join(AssessmentLink).filter(AssessmentLink.specialist_id == specialist_filter)
-    
-    if date_from_str:
-        try:
-            date_from = datetime.strptime(date_from_str, '%Y-%m-%d')
-            query = query.filter(Assessment.created_at >= date_from)
-        except ValueError:
-            pass
-    
-    if date_to_str:
-        try:
-            date_to = datetime.strptime(date_to_str, '%Y-%m-%d')
-            date_to = date_to.replace(hour=23, minute=59, second=59)
-            query = query.filter(Assessment.created_at <= date_to)
-        except ValueError:
-            pass
-    
-    assessments = query.order_by(Assessment.created_at.desc()).all()
-    specialists = Specialist.query.filter_by(is_active=True).order_by(Specialist.name).all()
-    
-    total_assessments = len(assessments)
-    average_score = round(sum(a.score for a in assessments) / total_assessments, 2) if total_assessments > 0 else 0
-    
-    specialist_stats = {}
-    if specialist_filter:
-        specialist = Specialist.query.get(specialist_filter)
-        if specialist:
-            specialist_scores = [a.score for a in assessments]
-            specialist_stats = {
-                'name': specialist.name,
-                'total': len(specialist_scores),
-                'average': round(sum(specialist_scores) / len(specialist_scores), 2) if specialist_scores else 0,
-                'min': min(specialist_scores) if specialist_scores else 0,
-                'max': max(specialist_scores) if specialist_scores else 0
-            }
-    
-    return render_template(
-        'admin/dashboard.html', 
-        assessments=assessments,
-        specialists=specialists,
-        total_assessments=total_assessments,
-        average_score=average_score,
-        specialist_stats=specialist_stats,
-        current_score_filter=score_filter,
-        current_specialist_filter=specialist_filter,
-        current_date_from=date_from_str,
-        current_date_to=date_to_str
-    )
- """
 @app.route('/admin/generate-link', methods=['GET', 'POST'])
 @admin_required
 def generate_link():
