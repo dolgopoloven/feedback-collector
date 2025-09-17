@@ -19,29 +19,65 @@
         <h5 class="card-title">Фильтры</h5>
         <form method="GET" action="{{ url_for('admin_dashboard') }}">
             <div class="row g-3 align-items-end">
+                <!-- Фильтр по ФИО специалиста -->
                 <div class="col-md-3">
+                    <label for="name" class="form-label">ФИО специалиста:</label>
+                    <input type="text" class="form-control" id="name" name="name" 
+                           placeholder="Поиск по имени" value="{{ current_name_filter or '' }}">
+                </div>
+                
+                <!-- Фильтр по должности -->
+                <div class="col-md-2">
+                    <label for="position" class="form-label">Должность:</label>
+                    <select class="form-select" id="position" name="position">
+                        <option value="">Все должности</option>
+                        {% for position in positions %}
+                            <option value="{{ position }}" {% if current_position_filter == position %}selected{% endif %}>
+                                {{ position }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <!-- Фильтр по конкретному специалисту -->
+                <div class="col-md-2">
+                    <label for="specialist" class="form-label">Конкретный специалист:</label>
+                    <select class="form-select" id="specialist" name="specialist">
+                        <option value="">Все специалисты</option>
+                        {% for specialist in specialists %}
+                            <option value="{{ specialist.id }}" {% if current_specialist_filter == specialist.id %}selected{% endif %}>
+                                {{ specialist.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <!-- Фильтр по оценке -->
+                <div class="col-md-1">
                     <label for="score" class="form-label">Оценка:</label>
                     <select class="form-select" id="score" name="score">
-                        <option value="">Все оценки</option>
+                        <option value="">Все</option>
                         {% for i in range(1, 11) %}
                             <option value="{{ i }}" {% if current_score_filter == i %}selected{% endif %}>{{ i }}</option>
                         {% endfor %}
                     </select>
                 </div>
                 
-                <div class="col-md-3">
+                <!-- Фильтр по дате -->
+                <div class="col-md-2">
                     <label for="date_from" class="form-label">Дата с:</label>
                     <input type="date" class="form-control" id="date_from" name="date_from" value="{{ current_date_from or '' }}">
                 </div>
                 
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <label for="date_to" class="form-label">Дата по:</label>
                     <input type="date" class="form-control" id="date_to" name="date_to" value="{{ current_date_to or '' }}">
                 </div>
                 
-                <div class="col-md-3">
-                    <button type="submit" class="btn btn-primary">Применить</button>
-                    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-secondary">Сбросить</a>
+                <!-- Кнопки -->
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100">Применить</button>
+                    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-secondary w-100 mt-2">Сбросить</a>
                 </div>
             </div>
         </form>
@@ -59,6 +95,8 @@
         <thead>
             <tr>
                 <th scope="col">ID</th>
+                <th scope="col">Специалист</th>
+                <th scope="col">Должность</th>
                 <th scope="col">Оценка</th>
                 <th scope="col">Комментарий</th>
                 <th scope="col">Дата</th>
@@ -69,16 +107,39 @@
             <tr>
                 <td>{{ assessment.id }}</td>
                 <td>
-                    <span class="badge {% if assessment.score >= 9 %}bg-success{% else %}bg-warning{% endif %}">
+                    {% set specialist = assessment.get_specialist() %}
+                    {% if specialist %}
+                        {{ specialist.name }}
+                    {% else %}
+                        <span class="text-muted">N/A</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if specialist %}
+                        <small class="text-muted">{{ specialist.position or '—' }}</small>
+                    {% else %}
+                        <span class="text-muted">—</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <span class="badge {% if assessment.score >= 9 %}bg-success{% elif assessment.score >= 6 %}bg-warning{% else %}bg-danger{% endif %}">
                         {{ assessment.score }}
                     </span>
                 </td>
-                <td>{{ assessment.comment or '' }}</td>
-                <td>{{ assessment.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td>
+                    {% if assessment.comment %}
+                        <span title="{{ assessment.comment }}">
+                            {{ assessment.comment[:50] }}{% if assessment.comment|length > 50 %}...{% endif %}
+                        </span>
+                    {% else %}
+                        <span class="text-muted">нет</span>
+                    {% endif %}
+                </td>
+                <td>{{ assessment.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
             </tr>
             {% else %}
             <tr>
-                <td colspan="4" class="text-center">Нет данных для отображения</td>
+                <td colspan="6" class="text-center">Нет данных для отображения</td>
             </tr>
             {% endfor %}
         </tbody>

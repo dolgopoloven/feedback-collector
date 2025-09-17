@@ -181,9 +181,104 @@ def admin_logout():
     session.pop('admin_logged_in', None)
     return redirect(url_for('index'))
 
+
 @app.route('/admin')
 @admin_required
 def admin_dashboard():
+    # Получаем параметры фильтрации из URL
+    score_filter = request.args.get('score', type=int)
+    specialist_filter = request.args.get('specialist', type=int)
+    name_filter = request.args.get('name', '').strip()
+    position_filter = request.args.get('position', '').strip()
+    date_from_str = request.args.get('date_from')
+    date_to_str = request.args.get('date_to')
+    
+    # Начинаем с базового запроса
+    query = Assessment.query
+    
+    # Применяем фильтр по оценке
+    if score_filter:
+        query = query.filter(Assessment.score == score_filter)
+    
+    # Применяем фильтр по ID специалиста
+    if specialist_filter:
+        query = query.join(AssessmentLink).filter(AssessmentLink.specialist_id == specialist_filter)
+    
+    # Применяем фильтр по ФИО специалиста (поиск по подстроке)
+    if name_filter:
+        query = query.join(AssessmentLink).join(Specialist).filter(
+            Specialist.name.ilike(f'%{name_filter}%')
+        )
+    
+    # Применяем фильтр по должности специалиста (поиск по подстроке)
+    if position_filter:
+        query = query.join(AssessmentLink).join(Specialist).filter(
+            Specialist.position.ilike(f'%{position_filter}%')
+        )
+    
+    # Применяем фильтр по дате "ОТ"
+    if date_from_str:
+        try:
+            date_from = datetime.strptime(date_from_str, '%Y-%m-%d')
+            query = query.filter(Assessment.created_at >= date_from)
+        except ValueError:
+            pass
+    
+    # Применяем фильтр по дате "ДО"
+    if date_to_str:
+        try:
+            date_to = datetime.strptime(date_to_str, '%Y-%m-%d')
+            date_to = date_to.replace(hour=23, minute=59, second=59)
+            query = query.filter(Assessment.created_at <= date_to)
+        except ValueError:
+            pass
+    
+    # Выполняем запрос
+    assessments = query.order_by(Assessment.created_at.desc()).all()
+    
+    # Получаем всех специалистов для фильтра
+    specialists = Specialist.query.filter_by(is_active=True).order_by(Specialist.name).all()
+    
+    # Рассчитываем статистику
+    total_assessments = len(assessments)
+    average_score = round(sum(a.score for a in assessments) / total_assessments, 2) if total_assessments > 0 else 0
+    
+    # Статистика по выбранному специалисту
+    specialist_stats = {}
+    if specialist_filter:
+        specialist = Specialist.query.get(specialist_filter)
+        if specialist:
+            specialist_scores = [a.score for a in assessments]
+            specialist_stats = {
+                'name': specialist.name,
+                'position': specialist.position,
+                'total': len(specialist_scores),
+                'average': round(sum(specialist_scores) / len(specialist_scores), 2) if specialist_scores else 0,
+                'min': min(specialist_scores) if specialist_scores else 0,
+                'max': max(specialist_scores) if specialist_scores else 0
+            }
+    
+    # Уникальные должности для фильтра
+    unique_positions = db.session.query(Specialist.position).distinct().filter(Specialist.position.isnot(None)).all()
+    positions = [pos[0] for pos in unique_positions if pos[0]]
+    
+    return render_template(
+        'admin/dashboard.html', 
+        assessments=assessments,
+        specialists=specialists,
+        positions=positions,
+        total_assessments=total_assessments,
+        average_score=average_score,
+        specialist_stats=specialist_stats,
+        current_score_filter=score_filter,
+        current_specialist_filter=specialist_filter,
+        current_name_filter=name_filter,
+        current_position_filter=position_filter,
+        current_date_from=date_from_str,
+        current_date_to=date_to_str
+    )
+
+""" def admin_dashboard():
     score_filter = request.args.get('score', type=int)
     specialist_filter = request.args.get('specialist', type=int)
     date_from_str = request.args.get('date_from')
@@ -243,7 +338,7 @@ def admin_dashboard():
         current_date_from=date_from_str,
         current_date_to=date_to_str
     )
-
+ """
 @app.route('/admin/generate-link', methods=['GET', 'POST'])
 @admin_required
 def generate_link():
