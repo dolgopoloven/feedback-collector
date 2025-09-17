@@ -21,6 +21,6 @@
 
 1. Клонировать репозиторий
 2. Создать виртуальное окружение: `python -m venv venv`
-3. Активировать: `source venv/bin/activate`
+3. Активировать: `source venv/bin/activate` # `venv\Scripts\activate.bat` для Windows
 4. Установить зависимости: `pip install -r requirements.txt`
 5. Запустить: `python app.py`
