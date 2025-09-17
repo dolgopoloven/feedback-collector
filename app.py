@@ -58,6 +58,21 @@ class Assessment(db.Model):
             return self.assessment_link.specialist
         return None
 
+with app.app_context():
+    try:
+        # Проверяем существование столбца
+        from sqlalchemy import inspect
+        inspector = inspect(db.engine)
+        columns = [col['name'] for col in inspector.get_columns('assessment')]
+        
+        if 'link_id' not in columns:
+            print('ВНИМАНИЕ: Столбец link_id отсутствует в базе!')
+            print('Выполните: flask db migrate && flask db upgrade')
+            
+    except Exception as e:
+        print(f'Ошибка проверки структуры базы: {e}')
+
+
 # Вспомогательные функции
 def generate_token(length=20):
     alphabet = string.ascii_letters + string.digits
