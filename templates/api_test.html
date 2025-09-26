@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h2>Тестирование API генерации ссылок</h2>
+    
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Генерация одной ссылки</h5>
+                </div>
+                <div class="card-body">
+                    <form id="singleLinkForm">
+                        <div class="mb-3">
+                            <label class="form-label">ID специалиста:</label>
+                            <input type="number" class="form-control" id="specialistId" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Срок действия (дней):</label>
+                            <input type="number" class="form-control" id="daysValid" value="7">
+                        </div>
+                        <button type="submit" class="btn btn-primary">Сгенерировать ссылку</button>
+                    </form>
+                    <div id="singleResult" class="mt-3"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Массовая генерация</h5>
+                </div>
+                <div class="card-body">
+                    <form id="massLinkForm">
+                        <div class="mb-3">
+                            <label class="form-label">Срок действия (дней):</label>
+                            <input type="number" class="form-control" id="massDaysValid" value="7">
+                        </div>
+                        <button type="submit" class="btn btn-success">Сгенерировать для всех</button>
+                    </form>
+                    <div id="massResult" class="mt-3"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5>Список специалистов</h5>
+        </div>
+        <div class="card-body">
+            <button onclick="loadSpecialists()" class="btn btn-info">Загрузить список</button>
+            <div id="specialistsList" class="mt-3"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Генерация одной ссылки
+document.getElementById('singleLinkForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const specialistId = document.getElementById('specialistId').value;
+    const daysValid = document.getElementById('daysValid').value;
+    
+    try {
+        const response = await fetch(`/api/generate-link?specialist_id=${specialistId}&days_valid=${daysValid}`);
+        const result = await response.json();
+        
+        if (result.success) {
+            document.getElementById('singleResult').innerHTML = `
+                <div class="alert alert-success">
+                    <strong>Успех!</strong><br>
+                    <strong>Специалист:</strong> ${result.specialist.name}<br>
+                    <strong>Ссылка:</strong> <a href="${result.link}" target="_blank">${result.link}</a><br>
+                    <strong>Действует до:</strong> ${new Date(result.expires_at).toLocaleDateString()}
+                </div>
+            `;
+        } else {
+            document.getElementById('singleResult').innerHTML = `
+                <div class="alert alert-danger">
+                    <strong>Ошибка:</strong> ${result.error}
+                </div>
+            `;
+        }
+    } catch (error) {
+        document.getElementById('singleResult').innerHTML = `
+            <div class="alert alert-danger">
+                <strong>Ошибка:</strong> ${error.message}
+            </div>
+        `;
+    }
+});
+
+// Массовая генерация
+document.getElementById('massLinkForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const daysValid = document.getElementById('massDaysValid').value;
+    
+    try {
+        const response = await fetch(`/api/generate-links?days_valid=${daysValid}`);
+        const result = await response.json();
+        
+        if (result.success) {
+            let html = `<div class="alert alert-success">
+                <strong>Успех! Сгенерировано ${result.count} ссылок</strong><br><br>`;
+            
+            result.links.forEach(link => {
+                html += `
+                    <div class="mb-2">
+                        <strong>${link.specialist.name}:</strong> 
+                        <a href="${link.link}" target="_blank">${link.link}</a>
+                    </div>
+                `;
+            });
+            
+            html += `</div>`;
+            document.getElementById('massResult').innerHTML = html;
+        } else {
+            document.getElementById('massResult').innerHTML = `
+                <div class="alert alert-danger">
+                    <strong>Ошибка:</strong> ${result.error}
+                </div>
+            `;
+        }
+    } catch (error) {
+        document.getElementById('massResult').innerHTML = `
+            <div class="alert alert-danger">
+                <strong>Ошибка:</strong> ${error.message}
+            </div>
+        `;
+    }
+});
+
+// Загрузка списка специалистов
+async function loadSpecialists() {
+    try {
+        const response = await fetch('/api/specialists');
+        const result = await response.json();
+        
+        if (result.success) {
+            let html = '<table class="table table-striped"><thead><tr><th>ID</th><th>Имя</th><th>Должность</th></tr></thead><tbody>';
+            
+            result.specialists.forEach(spec => {
+                html += `<tr><td>${spec.id}</td><td>${spec.name}</td><td>${spec.position || '-'}</td></tr>`;
+            });
+            
+            html += '</tbody></table>';
+            document.getElementById('specialistsList').innerHTML = html;
+        }
+    } catch (error) {
+        document.getElementById('specialistsList').innerHTML = `
+            <div class="alert alert-danger">
+                <strong>Ошибка:</strong> ${error.message}
+            </div>
+        `;
+    }
+}
+</script>
+{% endblock %}

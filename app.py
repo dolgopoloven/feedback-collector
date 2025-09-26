@@ -282,6 +282,120 @@ def admin_dashboard():
         current_date_to=date_to_str
     )
 
+@app.route('/api/generate-link')
+@admin_required
+def api_generate_link():
+    """Генерация ссылки через GET-запрос с параметрами"""
+    
+    # Получаем параметры из GET-запроса
+    specialist_id = request.args.get('specialist_id', type=int)
+    days_valid = request.args.get('days_valid', 7, type=int)
+    
+    # Проверяем обязательные параметры
+    if not specialist_id:
+        return {'error': 'Не указан specialist_id'}, 400
+    
+    specialist = Specialist.query.get(specialist_id)
+    if not specialist:
+        return {'error': 'Специалист не найден'}, 404
+    
+    # Генерируем ссылку
+    token = generate_token()
+    expires_at = datetime.utcnow() + timedelta(days=days_valid)
+    
+    new_link = AssessmentLink(
+        token=token,
+        specialist_id=specialist.id,
+        expires_at=expires_at
+    )
+    
+    db.session.add(new_link)
+    db.session.commit()
+    
+    # Формируем полный URL
+    full_url = f"{request.url_root}assessment/{token}"
+    
+    return {
+        'success': True,
+        'link': full_url,
+        'token': token,
+        'specialist': {
+            'id': specialist.id,
+            'name': specialist.name,
+            'position': specialist.position
+        },
+        'expires_at': expires_at.isoformat(),
+        'days_valid': days_valid
+    }
+
+@app.route('/api/generate-links')
+@admin_required
+def api_generate_links():
+    """Массовая генерация ссылок для всех активных специалистов"""
+    
+    days_valid = request.args.get('days_valid', 7, type=int)
+    specialists = Specialist.query.filter_by(is_active=True).all()
+    
+    if not specialists:
+        return {'error': 'Нет активных специалистов'}, 404
+    
+    results = []
+    
+    for specialist in specialists:
+        token = generate_token()
+        expires_at = datetime.utcnow() + timedelta(days=days_valid)
+        
+        new_link = AssessmentLink(
+            token=token,
+            specialist_id=specialist.id,
+            expires_at=expires_at
+        )
+        
+        db.session.add(new_link)
+        
+        full_url = f"{request.url_root}assessment/{token}"
+        
+        results.append({
+            'specialist': {
+                'id': specialist.id,
+                'name': specialist.name,
+                'position': specialist.position
+            },
+            'link': full_url,
+            'token': token,
+            'expires_at': expires_at.isoformat()
+        })
+    
+    db.session.commit()
+    
+    return {
+        'success': True,
+        'count': len(results),
+        'days_valid': days_valid,
+        'links': results
+    }
+
+@app.route('/api/specialists')
+@admin_required
+def api_specialists():
+    """Получение списка всех специалистов"""
+    
+    specialists = Specialist.query.filter_by(is_active=True).all()
+    
+    return {
+        'success': True,
+        'count': len(specialists),
+        'specialists': [
+            {
+                'id': spec.id,
+                'name': spec.name,
+                'position': spec.position,
+                'is_active': spec.is_active
+            }
+            for spec in specialists
+        ]
+    }
+
 @app.route('/admin/generate-link', methods=['GET', 'POST'])
 @admin_required
 def generate_link():
@@ -353,6 +467,12 @@ def view_database():
                          specialists=specialists,
                          assessment_links=assessment_links,
                          assessments=assessments)
+
+@app.route('/admin/api-test')
+@admin_required
+def api_test():
+    """Страница тестирования API"""
+    return render_template('api_test.html')
 
 if __name__ == '__main__':
     app.run(debug=True)
